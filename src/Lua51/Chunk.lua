@@ -41,6 +41,7 @@ local Chunk = {
             })
         end
         return setmetatable({
+            Identifier = "",
             Name = "",
             FirstLine = 1,
             LastLine = 1,

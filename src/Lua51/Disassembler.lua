@@ -66,6 +66,7 @@ local function Disassemble(chunk)
     
     local function ReadFunction()
         local c = Chunk:new()
+        c.Identifier = string.format("_%02x", index)
         c.Name = ReadString()
         c.FirstLine = ReadInt32()
         c.LastLine = ReadInt32()
