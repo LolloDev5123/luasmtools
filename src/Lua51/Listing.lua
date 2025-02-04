@@ -73,7 +73,7 @@ local function Listing(file)
     end
 
     local function format_lua_string(s)
-        return string.format("%q", s):gsub("\\\n", "\\n"):gsub("\027", "\\27")
+        return select(1,string.format("%q", s):gsub("\\\n", "\\n"):gsub("\027", "\\27"))
     end
 
     local function get_opcode_comment(instr, f, pc)
