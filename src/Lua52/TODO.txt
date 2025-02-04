@@ -1,3 +1,0 @@
-- Implement DumpBinary.Opcode for Ax
-- TFORCALL OpcodeParams
-- EXTRAARG OpcodeParams

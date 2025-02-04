@@ -7,8 +7,8 @@ local function Disassemble(chunk)
     if chunk == nil then
         error("File is nil!")
     end
-	local index = 1
-	local big = false;
+    local index = 1
+    local big = false;
     local file = LAT.Lua51.LuaFile:new()
     local loadNumber = nil
     
@@ -18,32 +18,28 @@ local function Disassemble(chunk)
         index = index + len
         if file.BigEndian then
             c = string.reverse(c)
-        else
         end
         return c
     end
-	
-	local function ReadInt8()		
-		local a = chunk:sub(index, index):byte()
-		index = index + 1
-		return a
-	end
     
-	local function ReadNumber()
+    local function ReadInt8()        
+        local a = chunk:sub(index, index):byte()
+        index = index + 1
+        return a
+    end
+    
+    local function ReadNumber()
         return loadNumber(Read(file.NumberSize))
-	end
-	
-	local function GetString(len)
-		local str = chunk:sub(index, index + len - 1)
-		index = index + len
-		return str
-	end
-	
-	local function ReadInt32()
-        if file.IntegerSize > file.SizeT then
-            error("IntegerSize cannot be greater than SizeT")
-        end
-        local x = Read(file.SizeT)
+    end
+    
+    local function GetString(len)
+        local str = chunk:sub(index, index + len - 1)
+        index = index + len
+        return str
+    end
+    
+    local function ReadInt32()
+        local x = Read(file.IntegerSize)
         if not x or x:len() == 0 then
             error("Could not load integer")
         else
@@ -57,29 +53,28 @@ local function Disassemble(chunk)
             end
             return sum
         end
-	end
+    end
     
-	local function ReadString()
-		local tmp = Read(file.SizeT)
+    local function ReadString()
+        local tmp = Read(file.SizeT)
         local sum = 0
         for i = file.SizeT, 1, -1 do
           sum = sum * 256 + string.byte(tmp, i)
         end
-		return GetString(sum):sub(1, -2) -- Strip last '\0'
-	end
+        return GetString(sum):sub(1, -2) -- Strip last '\0'
+    end
     
-	local function ReadFunction()
-		local c = Chunk:new()
-		c.Name = ReadString()
-		c.FirstLine = ReadInt32()
-		c.LastLine = ReadInt32()
-		c.UpvalueCount = ReadInt8() -- Upvalues
-		c.ArgumentCount = ReadInt8()
-		c.Vararg = ReadInt8()
-		c.MaxStackSize = ReadInt8()
-		
+    local function ReadFunction()
+        local c = Chunk:new()
+        c.Name = ReadString()
+        c.FirstLine = ReadInt32()
+        c.LastLine = ReadInt32()
+        c.UpvalueCount = ReadInt8() -- Upvalues
+        c.ArgumentCount = ReadInt8()
+        c.Vararg = ReadInt8()
+        c.MaxStackSize = ReadInt8()
+        
         -- Instructions
-		--c.Instructions.Count = ReadInt32()
         local count = ReadInt32()
         for i = 1, count do
             local op = ReadInt32();
@@ -99,9 +94,8 @@ local function Disassemble(chunk)
             end
             c.Instructions[i - 1] = instr
         end
-		
-		-- Constants
-        --c.Constants.Count = ReadInt32()
+        
+        -- Constants
         count = ReadInt32()
         for i = 1, count do
             local cnst = Constant:new()
@@ -125,7 +119,6 @@ local function Disassemble(chunk)
         end
 
         -- Protos
-        --c.Protos.Count = ReadInt32()
         count = ReadInt32()
         for i = 1, count do
             c.Protos[i - 1] = ReadFunction()
@@ -134,49 +127,47 @@ local function Disassemble(chunk)
         -- Line numbers
         for i = 1, ReadInt32() do 
             c.Instructions[i - 1].LineNumber = ReadInt32()
-		end
+        end
         
         -- Locals
-        --c.Locals.Count = ReadInt32()
         count = ReadInt32()
         for i = 1, count do
             c.Locals[i - 1] = Local:new(ReadString(), ReadInt32(), ReadInt32())
         end
         
         -- Upvalues
-        --c.Upvalues.Count = ReadInt32()
         count = ReadInt32()
         for i = 1, count do 
             c.Upvalues[i - 1] = Upvalue:new(ReadString())
         end
-		
-		return c
-	end
-	
-	file.Identifier = GetString(4) -- \027Lua
+        
+        return c
+    end
+    
+    file.Identifier = GetString(4) -- \027Lua
     if file.Identifier ~= "\027Lua" then
         error("Not a valid Lua bytecode chunk")
     end
-	file.Version = ReadInt8() -- 0x51
+    file.Version = ReadInt8() -- 0x51
     if file.Version ~= 0x51 then
         error(string.format("Invalid bytecode version, 0x51 expected, got 0x%02x", file.Version))
     end
-	file.Format = ReadInt8() == 0 and "Official" or "Unofficial"
+    file.Format = ReadInt8() == 0 and "Official" or "Unofficial"
     if file.Format == "Unofficial" then
         error("Unknown binary chunk format")
     end
-	file.BigEndian = ReadInt8() == 0
-	file.IntegerSize = ReadInt8()
-	file.SizeT = ReadInt8() 	
-	file.InstructionSize = ReadInt8()
-	file.NumberSize = ReadInt8()
-	file.IsFloatingPoint = ReadInt8() == 0
+    file.BigEndian = ReadInt8() == 0
+    file.IntegerSize = ReadInt8()
+    file.SizeT = ReadInt8()     
+    file.InstructionSize = ReadInt8()
+    file.NumberSize = ReadInt8()
+    file.IsFloatingPoint = ReadInt8() == 0
     loadNumber = GetNumberType(file)
     if file.InstructionSize ~= 4 then
         error("Unsupported instruction size '" .. file.InstructionSize .. "', expected '4'")
     end
-	file.Main = ReadFunction()
-	return file
+    file.Main = ReadFunction()
+    return file
 end
 
 return Disassemble
