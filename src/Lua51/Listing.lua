@@ -87,7 +87,18 @@ local function Listing(file)
         local Bx = instr.Bx
         local sBx = instr.sBx
         local FPF = 50 -- Fields Per Flush for SETLIST
-    
+
+        local max_idx = f.Instructions.Count
+        local max_offset = (max_idx - 1) * file.InstructionSize
+        local idx_width = math.floor(math.log10(max_idx)) + 1
+        local offset_width = string.format("%X", max_offset):len()
+        
+        local function format_goto(target_pc)
+            local target_idx = target_pc
+            local target_offset = target_pc * file.InstructionSize
+            return string.format("goto %0"..idx_width.."d /x%0"..offset_width.."X/", target_idx, target_offset)
+        end
+
         local function get_local_name(reg)
             if reg < f.Locals.Count then
                 local local_var = f.Locals[reg]
@@ -99,7 +110,8 @@ local function Listing(file)
         end
     
         local function reg_str(reg)
-            return get_local_name(reg) or ("R"..reg)
+            -- Avoid local names in debug that could confuse the opcode comments (R1 which is actually R4, etc.)
+            return (get_local_name(reg) and not string.match(get_local_name(reg),"^[RKUJ]%d+$")) and get_local_name(reg) or ("R"..reg)
         end
     
         local function rk_str(x)
@@ -113,9 +125,9 @@ local function Listing(file)
             comment = string.format("%s := %s", reg_str(A), format_constant(f.Constants[Bx]))
         elseif op == "LOADBOOL" then
             comment = string.format("%s := %s", reg_str(A), B ~= 0 and "true" or "false")
-            if C ~= 0 then comment = comment .. "; pc++" end
+            if C ~= 0 then comment = comment .. "; ".. format_goto(pc + 1) end
         elseif op == "LOADNIL" then
-            if A ~= B then
+            if reg_str(A) ~= reg_str(B) then
                 comment = string.format("%s..%s := nil", reg_str(A), reg_str(B))
             else
                 comment = string.format("%s := nil", reg_str(A))
@@ -137,7 +149,7 @@ local function Listing(file)
         elseif op == "NEWTABLE" then
             comment = string.format("%s := {} (array:%d, hash:%d)", reg_str(A), 2^B, 2^C)
         elseif op == "SELF" then
-            comment = string.format("%s := %s; %s := %s:%s", 
+            comment = string.format("%s := %s; %s := %s[%s]", 
                        reg_str(A+1), reg_str(B), reg_str(A), reg_str(B), rk_str(C))
         elseif op == "ADD" then
             comment = string.format("%s := %s + %s", reg_str(A), rk_str(B), rk_str(C))
@@ -160,18 +172,18 @@ local function Listing(file)
         elseif op == "CONCAT" then
             comment = string.format("%s := %s..%s", reg_str(A), reg_str(B), reg_str(C))
         elseif op == "JMP" then
-            comment = string.format("pc += %d", sBx)
+            comment = format_goto(pc + 1 + sBx)
         elseif op == "EQ" then
-            comment = string.format("if (%s == %s) ~= %d then pc++", rk_str(B), rk_str(C), A)
+            comment = string.format("if (%s == %s) ~= %d then %s", rk_str(B), rk_str(C), A, format_goto(pc + 1))
         elseif op == "LT" then
-            comment = string.format("if (%s < %s) ~= %d then pc++", rk_str(B), rk_str(C), A)
+            comment = string.format("if (%s < %s) ~= %d then %s", rk_str(B), rk_str(C), A, format_goto(pc + 1))
         elseif op == "LE" then
-            comment = string.format("if (%s <= %s) ~= %d then pc++", rk_str(B), rk_str(C), A)
+            comment = string.format("if (%s <= %s) ~= %d then %s", rk_str(B), rk_str(C), A, format_goto(pc + 1))
         elseif op == "TEST" then
-            comment = string.format("if (%s) ~= %s then pc++", reg_str(A), C ~= 0 and "true" or "false")
+            comment = string.format("if (%s) ~= %s then %s", reg_str(A), C ~= 0 and "true" or "false", format_goto(pc + 1))
         elseif op == "TESTSET" then
-            comment = string.format("if (%s) ~= %s then pc++ else %s := %s", 
-                       reg_str(B), C ~= 0 and "true" or "false", reg_str(A), reg_str(B))
+            comment = string.format("if (%s) ~= %s then %s else %s := %s", 
+                       reg_str(B), C ~= 0 and "true" or "false", format_goto(pc + 1), reg_str(A), reg_str(B))
         elseif op == "CALL" then
             local nargs = B-1
             local nres = C-1
@@ -199,16 +211,16 @@ local function Listing(file)
                 comment = string.format("return %s", table.concat(returns, ", "))
             else comment = "return" end
         elseif op == "FORLOOP" then
-            comment = string.format("%s += %s; if %s <= %s then pc += %d", 
-                       reg_str(A+1), reg_str(A+2), reg_str(A+1), reg_str(A), sBx)
+            comment = string.format("%s += %s; if %s <= %s then %s", 
+                       reg_str(A+1), reg_str(A+2), reg_str(A+1), reg_str(A), format_goto(pc + 1 + sBx))
         elseif op == "FORPREP" then
-            comment = string.format("%s -= %s; pc += %d", reg_str(A), reg_str(A+2), sBx)
+            comment = string.format("%s -= %s; %s", reg_str(A), reg_str(A+2), format_goto(pc + 1 + sBx))
         elseif op == "TFORLOOP" then
             local results = {}
             for i=3, 2+C do results[#results+1] = reg_str(A+i) end
-            comment = string.format("%s := %s(%s, %s); if %s ~= nil then %s := %s else pc++",
+            comment = string.format("%s := %s(%s, %s); if %s ~= nil then %s := %s else %s",
                        table.concat(results, ", "), reg_str(A), reg_str(A+1), reg_str(A+2),
-                       reg_str(A+3), reg_str(A+2), reg_str(A+3))
+                       reg_str(A+3), reg_str(A+2), reg_str(A+3), format_goto(pc + 1))
         elseif op == "SETLIST" then
             local start_idx = (C-1)*FPF + 1
             comment = string.format("%s[%d..%d] := %s..%s", 
@@ -273,7 +285,7 @@ local function Listing(file)
             elseif param_type == 4 then -- Upvalue
                 return string.format("U%d", value)
             elseif param_type == 5 then -- Jump Distance
-                return string.format(" %d", value)
+                return string.format("J%d", value)
             else
                 return tostring(value)
             end
