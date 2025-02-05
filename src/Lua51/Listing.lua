@@ -21,6 +21,9 @@ local function Listing(file)
         _print(("    "):rep(indent) .. line)
     end
 
+    local function LeftJustify(s, width) return s..string.rep(" ", width - string.len(s)) end
+    local function RightJustify(s, width) return string.rep(" ", width - string.len(s))..s end
+
     local function start_block(name)
         print("."..name)
         indent = indent + 1
@@ -247,11 +250,11 @@ local function Listing(file)
 
         indent = indent - 1
         
-        print(string.format("; %s %s %s%-9s %4s %4s %4s",
+        print(string.format(";%s%s %s %s%-9s  %s %s %s", (" "):rep(idx_width),
             string.format("%-"..idx_width.."s", "idx"):upper(),
             string.format("%-"..(offset_width + 3).."s", "offset"):upper(),
             (line_width > 0 and string.format("%-"..line_width.."s ", "line"):upper() or ""),
-            "OPCODE", "A", "B", "C"))
+            "OPCODE", "A    ", "B    ", "C"))
         indent = indent + 1
 
         local function format_param(param_type, value)
@@ -299,15 +302,15 @@ local function Listing(file)
             elseif instr.OpcodeType == "ABx" then
                 a = format_param(params[1], instr.A)
                 b = format_param(params[2], instr.Bx)
-                c = "-"
+                c = " -"
             elseif instr.OpcodeType == "AsBx" then
                 a = format_param(params[1], instr.A)
                 b = format_param(params[2], instr.sBx)
-                c = "-"
+                c = " -"
             end
 
-            print(string.format("%s %s %s%-9s %4s %4s %4s    ; %s",
-                idx, offset_str, (line and line.." " or ""), instr.Opcode:upper(), a, b, c, comment))
+            print(string.format("%s %s %s%-9s  %s  %s  %s    ; %s",
+                idx, offset_str, (line and line.." " or ""), instr.Opcode:upper(), LeftJustify(a, 4), LeftJustify(b, 4), LeftJustify(c, 4), comment))
         end
         
         end_block()
