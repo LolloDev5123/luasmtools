@@ -112,7 +112,11 @@ local function Listing(file)
             comment = string.format("%s := %s", reg_str(A), B ~= 0 and "true" or "false")
             if C ~= 0 then comment = comment .. "; pc++" end
         elseif op == "LOADNIL" then
-            comment = string.format("%s..%s := nil", reg_str(A), reg_str(B))
+            if A ~= B then
+                comment = string.format("%s..%s := nil", reg_str(A), reg_str(B))
+            else
+                comment = string.format("%s := nil", reg_str(A))
+            end
         elseif op == "GETUPVAL" then
             local uv = f.Upvalues[B]
             comment = string.format("%s := %s", reg_str(A), uv.Name or "Upval?")
@@ -236,18 +240,41 @@ local function Listing(file)
         local line_width = 0
         for i = 1, f.Instructions.Count do
             local instr = f.Instructions[i-1]
+            instr.LineNumber = nil
             line_width = math.max(line_width, instr.LineNumber or 0)
         end
         line_width = math.floor(math.log10(line_width)) + 1
 
         indent = indent - 1
         
-        print(string.format("; %s %s %s %-9s %4s %4s %4s",
+        print(string.format("; %s %s %s%-9s %4s %4s %4s",
             string.format("%-"..idx_width.."s", "idx"):upper(),
             string.format("%-"..(offset_width + 3).."s", "offset"):upper(),
-            string.format("%-"..line_width.."s", "line"):upper(),
+            (line_width > 0 and string.format("%-"..line_width.."s ", "line"):upper() or ""),
             "OPCODE", "A", "B", "C"))
         indent = indent + 1
+
+        local function format_param(param_type, value)
+            if param_type == 0 then -- Unused/Arbitrary
+                return string.format(" %d", value)
+            elseif param_type == 1 then -- Register
+                return string.format("R%d", value)
+            elseif param_type == 2 then -- Constant
+                return string.format("K%d", value)
+            elseif param_type == 3 then -- Constant/Register
+                if value >= 256 then
+                    return string.format("K%d", value - 256)
+                else
+                    return string.format("R%d", value)
+                end
+            elseif param_type == 4 then -- Upvalue
+                return string.format("U%d", value)
+            elseif param_type == 5 then -- Jump Distance
+                return string.format(" %d", value)
+            else
+                return tostring(value)
+            end
+        end
 
         for i = 1, f.Instructions.Count do
             local instr = f.Instructions[i-1]
@@ -260,20 +287,27 @@ local function Listing(file)
             
             local idx = string.format(idx_fmt, i)
             local offset_str = string.format(offset_fmt, offset)
-            local line = string.format(line_fmt, instr.LineNumber or 0)
+            local line = instr.LineNumber and string.format(line_fmt, instr.LineNumber or 0) or nil
             local comment = get_opcode_comment(instr, f, pc)
 
             local a, b, c = "", "", "-"
+            local params = instr.OpcodeParams
             if instr.OpcodeType == "ABC" then
-                a, b, c = tostring(instr.A), tostring(instr.B), tostring(instr.C)
+                a = format_param(params[1], instr.A)
+                b = format_param(params[2], instr.B)
+                c = format_param(params[3], instr.C)
             elseif instr.OpcodeType == "ABx" then
-                a, b = tostring(instr.A), tostring(instr.Bx)
+                a = format_param(params[1], instr.A)
+                b = format_param(params[2], instr.Bx)
+                c = "-"
             elseif instr.OpcodeType == "AsBx" then
-                a, b = tostring(instr.A), tostring(instr.sBx)
+                a = format_param(params[1], instr.A)
+                b = format_param(params[2], instr.sBx)
+                c = "-"
             end
 
-            print(string.format("%s %s %s %-9s %4s %4s %4s    ; %s",
-                idx, offset_str, line, instr.Opcode:upper(), a, b, c, comment))
+            print(string.format("%s %s %s%-9s %4s %4s %4s    ; %s",
+                idx, offset_str, (line and line.." " or ""), instr.Opcode:upper(), a, b, c, comment))
         end
         
         end_block()
