@@ -2,6 +2,7 @@ LAT = { }
 
 LAT.Lua51 = { }
 local bit = require 'Lua51.bin'
+LAT.Lua51.md5 = require 'Lua51.md5'
 LAT.Lua51.bit = bit[1]
 LAT.Lua51.DumpBinary = bit[2]
 LAT.Lua51.GetNumberType = require 'Lua51.PlatformConfig'

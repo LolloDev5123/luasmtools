@@ -1,5 +1,8 @@
+local _VERSION = "v1.1"
 local function Listing(file)
+
     local _print = print
+    local start_time = os.clock()
     local indent = 0
     local current_block = nil
     local block_stack = {}
@@ -15,10 +18,12 @@ local function Listing(file)
         end
     end
 
+    local buffer = {};
+
     local function print(...)
         local t = {...}
         local line = table.concat(t, " ")
-        _print(("    "):rep(indent) .. line)
+        table.insert(buffer, ("    "):rep(indent) .. line)
     end
 
     local function LeftJustify(s, width) return s..string.rep(" ", width - string.len(s)) end
@@ -76,7 +81,7 @@ local function Listing(file)
     end
 
     local function format_lua_string(s)
-        return string.format("%q", s):gsub("\\\n", "\\n"):gsub("\027", "\\27")
+        return ({string.format("%q", s):gsub("\\\n", "\\n"):gsub("\027", "\\27")})[1]
     end
 
     local function get_opcode_comment(instr, f, pc)
@@ -128,13 +133,13 @@ local function Listing(file)
             if C ~= 0 then comment = comment .. "; ".. format_goto(pc + 1) end
         elseif op == "LOADNIL" then
             if reg_str(A) ~= reg_str(B) then
-                comment = string.format("%s..%s := nil", reg_str(A), reg_str(B))
+                comment = string.format("%s, ..., %s := nil", reg_str(A), reg_str(B))
             else
                 comment = string.format("%s := nil", reg_str(A))
             end
         elseif op == "GETUPVAL" then
             local uv = f.Upvalues[B]
-            comment = string.format("%s := %s", reg_str(A), uv.Name or "Upval?")
+            comment = string.format("%s := %s", reg_str(A), uv.Name or "U"..tostring(B))
         elseif op == "GETGLOBAL" then
             comment = string.format("%s := _G[%s]", reg_str(A), format_constant(f.Constants[Bx]))
         elseif op == "GETTABLE" then
@@ -143,13 +148,13 @@ local function Listing(file)
             comment = string.format("_G[%s] := %s", format_constant(f.Constants[Bx]), reg_str(A))
         elseif op == "SETUPVAL" then
             local uv = f.Upvalues[B]
-            comment = string.format("%s := %s", uv.Name or "Upval?", reg_str(A))
+            comment = string.format("%s := %s", uv.Name or "U"..tostring(B), reg_str(A))
         elseif op == "SETTABLE" then
             comment = string.format("%s[%s] := %s", reg_str(A), rk_str(B), rk_str(C))
         elseif op == "NEWTABLE" then
             comment = string.format("%s := {} (array:%d, hash:%d)", reg_str(A), 2^B, 2^C)
         elseif op == "SELF" then
-            comment = string.format("%s := %s; %s := %s[%s]", 
+            comment = string.format("%s := %s; %s := %s[%s]",
                        reg_str(A+1), reg_str(B), reg_str(A), reg_str(B), rk_str(C))
         elseif op == "ADD" then
             comment = string.format("%s := %s + %s", reg_str(A), rk_str(B), rk_str(C))
@@ -170,7 +175,7 @@ local function Listing(file)
         elseif op == "LEN" then
             comment = string.format("%s := #%s", reg_str(A), reg_str(B))
         elseif op == "CONCAT" then
-            comment = string.format("%s := %s..%s", reg_str(A), reg_str(B), reg_str(C))
+            comment = string.format("%s := %s .. %s", reg_str(A), reg_str(B), reg_str(C))
         elseif op == "JMP" then
             comment = format_goto(pc + 1 + sBx)
         elseif op == "EQ" then
@@ -182,7 +187,7 @@ local function Listing(file)
         elseif op == "TEST" then
             comment = string.format("if (%s) ~= %s then %s", reg_str(A), C ~= 0 and "true" or "false", format_goto(pc + 1))
         elseif op == "TESTSET" then
-            comment = string.format("if (%s) ~= %s then %s else %s := %s", 
+            comment = string.format("if (%s) ~= %s then %s else %s := %s",
                        reg_str(B), C ~= 0 and "true" or "false", format_goto(pc + 1), reg_str(A), reg_str(B))
         elseif op == "CALL" then
             local nargs = B-1
@@ -194,9 +199,13 @@ local function Listing(file)
             
             local res_str = ""
             if nres > 0 then
-                res_str = string.format("%s..%s := ", reg_str(A), reg_str(A+nres-1))
+                if reg_str(A) ~= reg_str(A+nres-1) then
+                    res_str = string.format("%s, ..., %s := ", reg_str(A), reg_str(A+nres-1))
+                else
+                    res_str = string.format("%s := ", reg_str(A), reg_str(A+nres-1))
+                end
             elseif nres < 0 then
-                res_str = string.format("%s... := ", reg_str(A))
+                res_str = string.format("%s, ... := ", reg_str(A))
             end
             
             comment = string.format("%s%s(%s)", res_str, reg_str(A), table.concat(args, ", "))
@@ -359,8 +368,8 @@ local function Listing(file)
         local keys = { "source", "lines", "upvalues", "params", "maxstack" }
         calculate_padding(block_type, keys)
         
-        if f.Source and f.Source ~= "" then
-            kv("source", format_lua_string(f.Source))
+        if f.Name and f.Name ~= "" then
+            kv("source", format_lua_string(f.Name))
         end
         
         if f.FirstLine and f.LastLine then
@@ -421,7 +430,7 @@ local function Listing(file)
     local header_keys = { "signature", "version", "format", "endianness", "int", "size_t", "instr", "number", "integral" }
     calculate_padding("header", header_keys)
     
-    kv("signature", format_lua_string(file.Identifier), nil)
+    kv("signature", format_lua_string(file.Identifier))
     kv("version", string.format("0x%02x", file.Version))
     kv("format", file.Format == "official" and 0 or 1, string.lower(file.Format))
     local endian_val = file.BigEndian and 0 or 1
@@ -435,6 +444,33 @@ local function Listing(file)
     end_block()
     
     dump_proto(file.Main, true)
+    
+    local end_time = os.clock()
+
+    local function timestamp()
+        local date_table = os.date("*t")
+        return string.format(
+            "%04d %02d %02d %02d:%02d:%02d",
+            date_table.year,
+            date_table.month,
+            date_table.day,
+            date_table.hour,
+            date_table.min,
+            date_table.sec
+        )
+    end
+
+    table.insert(buffer, 1, "") -- newline
+    table.insert(buffer, 1, string.format("; md5 hash %s", file.Checksum))
+    table.insert(buffer, 1, string.format("; generation time %.5fs", end_time-start_time))
+    table.insert(buffer, 1, string.format("; timestamp %s", timestamp()))
+    table.insert(buffer, 1, string.format("; source %s", file.Main.Name))
+
+    table.insert(buffer, 1, "") -- newline
+    
+    table.insert(buffer, 1, string.format("; generated by Retrospect %s", _VERSION))
+    table.insert(buffer, 1, "; lua 5.1 bytecode disassembly listing")
+    _print(table.concat(buffer, "\n"))
 end
 
 return Listing

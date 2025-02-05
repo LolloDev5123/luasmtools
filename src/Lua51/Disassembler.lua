@@ -1,3 +1,4 @@
+local USE_MD5 = true; -- Adds significant disassembling latency
 local function Disassemble(chunk)
     local bit = LAT.Lua51.bit
     local Chunk, Local, Constant, Upvalue, Instruction = LAT.Lua51.Chunk, LAT.Lua51.Local, LAT.Lua51.Constant, LAT.Lua51.Upvalue, LAT.Lua51.Instruction
@@ -11,7 +12,16 @@ local function Disassemble(chunk)
     local big = false;
     local file = LAT.Lua51.LuaFile:new()
     local loadNumber = nil
-    
+
+    local function ChunkIndexHexZeroes(total_size)
+        local digits = 1
+        while total_size >= 10 do
+            total_size = math.floor(total_size / 10)
+            digits = digits + 1
+        end
+        return digits
+    end
+
     local function Read(len)
         len = len or 1
         local c = chunk:sub(index, index + len - 1)
@@ -65,8 +75,8 @@ local function Disassemble(chunk)
     end
     
     local function ReadFunction()
+        local startIndex = index  -- Capture start of function data
         local c = Chunk:new()
-        c.Identifier = string.format("_%02x", index)
         c.Name = ReadString()
         c.FirstLine = ReadInt32()
         c.LastLine = ReadInt32()
@@ -124,7 +134,13 @@ local function Disassemble(chunk)
         for i = 1, count do
             c.Protos[i - 1] = ReadFunction()
         end
-        
+
+        -- Calculate checksum before reading debug information
+        local endIndex = index
+        local functionData = chunk:sub(startIndex, endIndex - 1)
+        c.Checksum = USE_MD5 and LAT.Lua51.md5.sumhexa(functionData) or nil
+        c.Identifier = "fcn_"..(c.Checksum or string.format("%0"..ChunkIndexHexZeroes(#chunk).."x", index)):sub(-8)
+
         -- Line numbers
         for i = 1, ReadInt32() do 
             c.Instructions[i - 1].LineNumber = ReadInt32()
@@ -168,6 +184,7 @@ local function Disassemble(chunk)
         error("Unsupported instruction size '" .. file.InstructionSize .. "', expected '4'")
     end
     file.Main = ReadFunction()
+    file.Checksum = USE_MD5 and LAT.Lua51.md5.sumhexa(chunk) or "<md5 is disabled>"
     return file
 end
 
