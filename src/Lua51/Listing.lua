@@ -76,7 +76,7 @@ local function Listing(file)
     end
 
     local function format_lua_string(s)
-        return select(1,string.format("%q", s):gsub("\\\n", "\\n"):gsub("\027", "\\27"))
+        return string.format("%q", s):gsub("\\\n", "\\n"):gsub("\027", "\\27")
     end
 
     local function get_opcode_comment(instr, f, pc)
@@ -326,7 +326,7 @@ local function Listing(file)
             for i = 1, f.ArgumentCount do
                 if f.Locals and (i-1) < f.Locals.Count then
                     local local_var = f.Locals[i-1]
-                    params[#params + 1] = format_lua_string(local_var.Name) or "?"
+                    params[#params + 1] = local_var.Name or "?"
                 else
                     params[#params + 1] = "?"
                 end
@@ -409,7 +409,7 @@ local function Listing(file)
     local header_keys = { "signature", "version", "format", "endianness", "int", "size_t", "instr", "number", "integral" }
     calculate_padding("header", header_keys)
     
-    kv("signature", format_lua_string(file.Identifier))
+    kv("signature", format_lua_string(file.Identifier), nil)
     kv("version", string.format("0x%02x", file.Version))
     kv("format", file.Format == "official" and 0 or 1, string.lower(file.Format))
     local endian_val = file.BigEndian and 0 or 1
