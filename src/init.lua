@@ -23,16 +23,18 @@ LAT.Lua51.Listing = require 'Lua51.Listing'
 LAT.Lua51.Lexer = require 'Lua51.LasmParser.Lexer'
 LAT.Lua51.Parser = require 'Lua51.LasmParser.Parser'
 
-
-LAT.Disassemble = function(s)
-    local c = s:sub(5, 1)
-    if c:len() == 0 then error("Invalid bytecode header") end
-    local b = string.byte(c)
-    if b == 0x51 then
-        return LAT.Lua51.Disassemble(s)
-    else
-        error("Invalid bytecode header")
-    end
+LAT.Listing = function(s)
+    --local c = s:sub(4, 1)
+    --if c:len() == 0 then error("Invalid bytecode header") end
+    --local b = string.byte(c)
+    --if b == 0x51 then
+    local start_time = os.clock()
+    return LAT.Lua51.Listing(LAT.Lua51.Disassemble(s), start_time)
+    --else
+    --    error("Invalid bytecode header")
+    --end
 end
+
+
 
 return LAT
